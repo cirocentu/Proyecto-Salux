@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+  // rhel-openssl-3.0.x es el entorno de Vercel/AWS Lambda; "native" es tu máquina o Docker.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  // Conexión que usa la app en ejecución. En Supabase: el pooler de transacciones
+  // (puerto 6543, con ?pgbouncer=true&connection_limit=1), ideal para serverless.
+  url       = env("DATABASE_URL")
+  // Conexión para migraciones (prisma migrate): sin pooler de transacciones.
+  directUrl = env("DIRECT_URL")
+}
+
+model Usuario {
+  idUsuario   Int            @id @default(autoincrement())
+  email       String         @unique
+  dni         String         @unique
+  contrasena  String
+  nomYape     String
+  activo      Boolean        @default(true)
+  // Se incrementa al cambiar/resetear la contraseña: los tokens emitidos antes
+  // (access y refresh) llevan la versión vieja y dejan de valer.
+  tokenVersion Int           @default(0)
+
+  // El admin crea los médicos con una contraseña inicial: hasta que la cambien
+  // en su primer ingreso, la API solo les deja usar el cambio de contraseña.
+  debeCambiarContrasena Boolean @default(false)
+
+  // Verificación de email al registrarse (si REQUIERE_VERIFICACION_EMAIL=true).
+  // Los usuarios que ya existían quedan verificados. El token se guarda hasheado.
+  emailVerificado    Boolean   @default(true)
+  verificacionToken  String?   @unique
+  verificacionExpira DateTime?
+
+  sesiones Sesion[]
+
+  // Recuperación de contraseña: token de un solo uso + vencimiento. Ambos
+  // quedan en null mientras no haya un pedido de reset pendiente.
+  resetPasswordToken   String?   @unique
+  resetPasswordExpira  DateTime?
+
+  paciente    Paciente?
+  medico      Medico?
+  admin       Administrador?
+}
+
+// Una fila por inicio de sesión (dispositivo/navegador). El refresh token y el
+// access token llevan su id: borrar la fila cierra esa sesión de verdad, y
+// al cambiar la contraseña se borran todas.
+// Contadores de los límites de intentos (login, registro...) guardados en la
+// base: en serverless no hay memoria compartida entre invocaciones. Ver
+// src/config/rateLimitStore.js. Se limpian en la tarea de mantenimiento.
+model RateLimitContador {
+  clave    String   @id
+  hits     Int
+  expiraEn DateTime
+
+  @@index([expiraEn])
+}
+
+model Sesion {
+  idSesion  Int      @id @default(autoincrement())
+  usuarioId Int
+  usuario   Usuario  @relation(fields: [usuarioId], references: [idUsuario], onDelete: Cascade)
+  creadaEn  DateTime @default(now())
+  expiraEn  DateTime
+
+  // Rotación del refresh token: cada renovación entrega uno nuevo (jti distinto) y el
+  // anterior deja de valer. Presentar uno ya rotado delata un robo/copia: la sesión se revoca.
+  // Nulos en las sesiones anteriores a la rotación (ver migración 20261023000000).
+  jtiActual   String?
+  jtiAnterior String?
+  rotadaEn    DateTime?
+
+  @@index([usuarioId])
+  @@index([expiraEn])
+}
+
+model Paciente {
+  idPaciente  Int      @id @default(autoincrement())
+  obraSocial  String?
+  telefono    String?
+  
+  usuarioId   Int      @unique
+  usuario     Usuario  @relation(fields: [usuarioId], references: [idUsuario])
+  
+  turnos      Turno[]
+}
+
+model Medico {
+  idMedico    Int      @id @default(autoincrement())
+  matricula   String   @unique
+  consultorio String?
+  // Cuánto dura un turno de este médico, en minutos. Reemplaza la constante
+  // fija que usaba el chequeo de solapamiento de turno.controller.js.
+  duracionTurnoMinutos Int @default(30)
+
+  usuarioId   Int      @unique
+  usuario     Usuario  @relation(fields: [usuarioId], references: [idUsuario])
+
+  turnos      Turno[]
+  especialidades Especialidad[]
+  disponibilidades Disponibilidad[]
+  ausencias   AusenciaMedico[]
+}
+
+// Ausencia puntual del médico (ej: vacaciones, un feriado que decide no
+// atender) — a diferencia de Disponibilidad (que es recurrente semanal),
+// esto es un rango de fechas concreto que se descuenta de la disponibilidad
+// al generar horarios y al validar una reserva.
+model AusenciaMedico {
+  idAusencia  Int      @id @default(autoincrement())
+  // Ambas fechas son inclusive y se comparan solo por día (sin horario)
+  fechaInicio DateTime
+  fechaFin    DateTime
+  motivo      String?
+
+  medicoId    Int
+  medico      Medico   @relation(fields: [medicoId], references: [idMedico])
+}
+
+// Franjas horarias recurrentes semanales en las que un médico atiende
+// (ej: "Lunes de 08:00 a 12:00"). Un médico sin ninguna franja cargada se
+// interpreta como "sin restricción" (compatibilidad con médicos existentes
+// creados antes de que este módulo existiera) — ver crearTurno.
+model Disponibilidad {
+  idDisponibilidad  Int @id @default(autoincrement())
+  // 0 = domingo ... 6 = sábado, igual que Date.getDay() en JS
+  diaSemana         Int
+  // Minutos desde la medianoche (0-1439), para poder comparar sin lidiar con zonas horarias
+  horaInicioMinutos Int
+  horaFinMinutos    Int
+
+  medicoId          Int
+  medico            Medico @relation(fields: [medicoId], references: [idMedico])
+
+  @@unique([medicoId, diaSemana, horaInicioMinutos])
+}
+
+model Administrador {
+  idAdmin     Int      @id @default(autoincrement())
+  usuarioId   Int      @unique
+  usuario     Usuario  @relation(fields: [usuarioId], references: [idUsuario])
+}
+
+model Especialidad {
+  idEspecialidad Int      @id @default(autoincrement())
+  nombre         String   @unique
+  activo         Boolean  @default(true)
+  medicos        Medico[]
+  turnos         Turno[]
+}
+
+model Turno {
+  idTurno     Int      @id @default(autoincrement())
+  fechaYhora  DateTime
+  estado      EstadoTurno @default(PENDIENTE)
+  // El paciente confirma que va a asistir, independiente de que el médico
+  // haya confirmado el turno — son dos señales distintas (ver Entrega: "el
+  // paciente también confirma su turno" para bajar el ausentismo).
+  confirmadoPorPaciente Boolean @default(false)
+
+  pacienteId  Int
+  paciente    Paciente @relation(fields: [pacienteId], references: [idPaciente])
+  
+  medicoId    Int
+  medico      Medico   @relation(fields: [medicoId], references: [idMedico])
+
+  // Especialidad por la que se reservó. Null en los turnos anteriores a que se
+  // guardara este dato (la UI cae a la primera especialidad del médico).
+  especialidadId Int?
+  especialidad   Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+
+  // La unicidad de horario (un médico / un paciente no pueden tener dos turnos
+  // en el mismo instante) vale SOLO para turnos no cancelados: está hecha con
+  // índices únicos PARCIALES (WHERE estado <> 'CANCELADO') en la migración, porque
+  // Prisma no los puede expresar acá. Así un turno cancelado libera su horario.
+  @@index([medicoId])
+  @@index([pacienteId])
+}
+
+enum EstadoTurno {
+  PENDIENTE
+  CONFIRMADO
+  CANCELADO
+  FINALIZADO
+}

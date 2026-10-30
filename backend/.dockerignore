@@ -1,0 +1,39 @@
+# Lo que NO viaja al daemon de Docker al construir la imagen. El Dockerfile ya copia
+# solo una lista explícita de carpetas; esto es la segunda barrera (y acelera el build).
+
+# Secretos y entorno
+.env
+.env.*
+!.env.example
+
+# Dependencias y cachés (la imagen las instala adentro)
+node_modules
+npm-debug.log*
+coverage
+
+# Control de versiones y documentación
+.git
+.gitignore
+*.md
+
+# Desarrollo y pruebas
+test
+scripts
+Dockerfile
+.dockerignore
+docker
+docker-compose*.yml
+
+# Scripts que crean cuentas / usan credenciales del .env: se corren desde la máquina
+# del desarrollador, nunca dentro del contenedor del servidor
+crearAdmin.js
+seedDemo.js
+verificarEmailManual.js
+
+# Volcados y respaldos de la base: no deben terminar nunca en una imagen
+*.dump
+*.sql.gz
+*.enc
+*.pem
+*.key
+respaldo*
