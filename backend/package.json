@@ -37,7 +37,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.0.10",
     "prisma": "^5.22.0",
-    "redis": "^4.7.1",
+    "redis": "^6.3.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
