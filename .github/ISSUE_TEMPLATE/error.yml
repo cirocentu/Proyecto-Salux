@@ -1,0 +1,42 @@
+name: Error
+description: Algo no funciona como debería
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Si encontraste una **vulnerabilidad de seguridad**, no uses este formulario: seguí [SECURITY.md](https://github.com/cirocentu/Proyecto-Salux/blob/main/SECURITY.md).
+        No pegues datos reales de pacientes.
+  - type: textarea
+    id: que-paso
+    attributes:
+      label: Qué pasó
+      description: Qué esperabas y qué ocurrió en cambio.
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: |
+        1. Iniciar sesión como médico
+        2. Ir a "Mi disponibilidad"
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: rol
+    attributes:
+      label: Rol con el que ocurre
+      options: [Paciente, Médico, Administrador, Sin sesión]
+    validations:
+      required: true
+  - type: input
+    id: entorno
+    attributes:
+      label: Navegador y dispositivo
+      placeholder: Chrome 130 en Windows 11
+  - type: textarea
+    id: extra
+    attributes:
+      label: Capturas o mensajes de error

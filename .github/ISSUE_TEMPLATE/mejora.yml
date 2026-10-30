@@ -1,0 +1,30 @@
+name: Mejora o funcionalidad nueva
+description: Una idea para que Salux resuelva algo mejor
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Contalo desde quien lo usa (paciente, médico o administración), no desde la solución.
+    validations:
+      required: true
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Cómo imaginás que funcionaría
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas que consideraste
+  - type: checkboxes
+    id: impacto
+    attributes:
+      label: ¿Toca alguno de estos temas?
+      options:
+        - label: Datos personales o de salud
+        - label: Permisos entre roles
+        - label: Base de datos (migración)
+        - label: Accesibilidad
