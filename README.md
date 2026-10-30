@@ -119,4 +119,4 @@ Proyecto de la cátedra de Desarrollo de Software (UTN FRLP).
 
 ## Estado
 
-Desplegado y en funcionamiento (Vercel + Supabase). Está pendiente decidir la **licencia** del repositorio y adquirir un dominio propio para los correos (hoy los envía una cuenta de Brevo sin dominio verificado).
+Desplegado y en funcionamiento (Vercel + Supabase). Licencia [MIT](LICENSE). Está pendiente adquirir un dominio propio para los correos (hoy los envía una cuenta de Brevo sin dominio verificado).
