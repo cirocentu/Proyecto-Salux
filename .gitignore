@@ -1,0 +1,47 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+
+# Material interno del equipo (guías de estudio, presentación): no va al repositorio público
+interno/
+
+# Claude Code local tooling (worktrees de agentes, etc.)
+.claude/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+coverage/
+
+# Respaldos y claves: JAMÁS al repositorio (es público)
+*.dump
+*.dump.enc
+*.sql.gz
+*.pem
+*.key
+respaldos/
+respaldos/
+
+# Salidas de Playwright
+test-results/
+playwright-report/
