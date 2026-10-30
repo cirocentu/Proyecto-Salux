@@ -1,0 +1,47 @@
+{
+  "name": "salux-backend",
+  "version": "1.0.0",
+  "description": "API REST del sistema de gestión de turnos médicos Salux",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:seed": "node crearAdmin.js",
+    "db:studio": "prisma studio",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node test/correr.js unit",
+    "test:integration": "node test/prepararBase.js && node test/correr.js integration",
+    "secretos": "node scripts/generarSecretos.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@vercel/functions": "^3.10.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^10.0.10",
+    "prisma": "^5.22.0",
+    "redis": "^4.7.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1",
+    "yaml": "^2.9.1"
+  }
+}
