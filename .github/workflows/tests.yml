@@ -1,0 +1,209 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Permisos mínimos para el token del workflow: solo leer el código. Sin esto, según la
+# configuración del repositorio, el token puede tener permiso de escritura.
+permissions:
+  contents: read
+
+# Si se sube un commit nuevo a un pull request, el pipeline anterior ya no sirve: se cancela
+# para no gastar minutos ni dejar resultados viejos. En main nunca se cancela.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: backend (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]   # 24 es el de la imagen de Docker; 22 sigue en soporte
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: salux_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/salux_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npm run test:integration
+
+  frontend:
+    name: frontend (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  # Accesibilidad en un navegador REAL (Chromium + axe-core): contraste, orden de tabulación,
+  # tamaño de los controles y navegación con teclado, en todos los roles y temas. jsdom no
+  # puede medir nada de eso. La API se simula: no necesita backend ni base de datos.
+  accesibilidad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:a11y
+      - name: Guardar el informe si falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-accesibilidad
+          path: test-results/
+          retention-days: 7
+
+  # La imagen de Docker del backend tiene que construirse y cumplir lo mínimo de seguridad.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen
+        run: docker build -t salux-backend:ci backend
+      - name: Comprobar que la imagen es segura y mínima
+        run: |
+          set -eu
+          docker run --rm --entrypoint sh salux-backend:ci -c '
+            [ "$(id -u)" != "0" ] || { echo "ERROR: corre como root"; exit 1; }
+            [ "$NODE_ENV" = "production" ] || { echo "ERROR: NODE_ENV no es production"; exit 1; }
+            for f in test scripts docker crearAdmin.js seedDemo.js .env; do
+              [ ! -e "/app/$f" ] || { echo "ERROR: /app/$f no debería estar en la imagen"; exit 1; }
+            done
+            node -v'
+
+  # Las migraciones tienen que aplicar sobre una base VACÍA (así arranca un entorno nuevo) y dejar
+  # exactamente el esquema de schema.prisma: si alguien cambia el esquema y se olvida de generar la
+  # migración, producción quedaría distinta de lo que prueba el CI.
+  esquema:
+    name: migraciones y esquema
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: salux_esquema
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/salux_esquema
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/salux_esquema
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Validar el esquema
+        run: npx prisma validate
+      - name: Aplicar todas las migraciones sobre una base vacía
+        run: npx prisma migrate deploy
+      - name: Comprobar que no hay diferencias entre las migraciones y schema.prisma
+        run: npx prisma migrate diff --from-url "$DIRECT_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Avisar si el pull request trae migraciones
+        if: github.event_name == 'pull_request'
+        run: |
+          nuevas=$(git diff --name-only --diff-filter=A "origin/${{ github.base_ref }}...HEAD" -- prisma/migrations | grep migration.sql || true)
+          if [ -n "$nuevas" ]; then
+            echo "::warning title=Este PR trae migraciones::Antes de mergear, aplicalas en producción (npx prisma migrate deploy). Orden: primero la base, después el merge. Ver docs/DESPLIEGUE.md."
+            echo "$nuevas"
+          fi
+
+  # Auditoría de las dependencias que llegan a producción. Corta el pipeline solo con
+  # vulnerabilidades CRÍTICAS; las altas se listan como aviso para que no queden en silencio
+  # (las que no tienen arreglo compatible figuran en SECURITY.md). La revisión de las
+  # dependencias NUEVAS de cada PR está en seguridad.yml.
+  dependencias:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Auditar el frontend y la API (raíz)
+        run: |
+          npm audit --omit=dev --audit-level=high || echo "::warning title=npm audit (raíz)::Hay vulnerabilidades altas en dependencias de producción. Ver el log y SECURITY.md."
+          npm audit --omit=dev --audit-level=critical
+      - name: Auditar el backend
+        working-directory: backend
+        run: |
+          npm audit --omit=dev --audit-level=high || echo "::warning title=npm audit (backend)::Hay vulnerabilidades altas en dependencias de producción. Ver el log y SECURITY.md."
+          npm audit --omit=dev --audit-level=critical
+
+  # Un único resultado para exigir en la protección de la rama main (Settings → Branches):
+  # pasa solo si TODOS los controles pasan. Así no hay que actualizar la protección cada
+  # vez que se agrega o se renombra un trabajo.
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [backend, frontend, accesibilidad, docker, esquema, dependencias]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resumir
+        run: |
+          echo "Resultados: ${{ join(needs.*.result, ', ') }}"
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "Algún control falló o se canceló."
+            exit 1
+          fi

@@ -1,0 +1,50 @@
+name: Respaldo de la base
+
+# Respaldo diario CIFRADO de la base de producción. Viene APAGADO: solo corre si en
+# Settings → Secrets and variables → Actions → Variables existe RESPALDO_ACTIVO=true.
+# Guía completa: backend/scripts/respaldo/README.md
+#
+# IMPORTANTE: el repositorio es público y los artefactos de un repositorio público los puede
+# descargar cualquier persona con cuenta de GitHub. Por eso el archivo sale CIFRADO con un
+# certificado público; solo quien tiene la clave privada (que NO está en GitHub) puede leerlo.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'   # 06:17 UTC = 03:17 en Argentina
+  workflow_dispatch:        # también se puede lanzar a mano
+
+permissions:
+  contents: read
+
+concurrency:
+  group: respaldo
+  cancel-in-progress: false
+
+jobs:
+  respaldo:
+    if: ${{ vars.RESPALDO_ACTIVO == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Respaldar y cifrar
+        env:
+          RESPALDO_DATABASE_URL: ${{ secrets.RESPALDO_DATABASE_URL }}
+          CERTIFICADO_PUBLICO: ${{ secrets.RESPALDO_CERTIFICADO_PUBLICO }}
+        run: |
+          set -euo pipefail
+          : "${RESPALDO_DATABASE_URL:?Falta el secreto RESPALDO_DATABASE_URL}"
+          : "${CERTIFICADO_PUBLICO:?Falta el secreto RESPALDO_CERTIFICADO_PUBLICO}"
+          printf '%s\n' "$CERTIFICADO_PUBLICO" > "$RUNNER_TEMP/salux-respaldo-publica.pem"
+          RESPALDO_CERTIFICADO="$RUNNER_TEMP/salux-respaldo-publica.pem" \
+          RESPALDO_SALIDA="$RUNNER_TEMP/respaldos" \
+            bash backend/scripts/respaldo/respaldar.sh supabase
+
+      - name: Guardar el respaldo cifrado
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-cifrado
+          path: ${{ runner.temp }}/respaldos/*.enc
+          retention-days: 14
+          if-no-files-found: error
