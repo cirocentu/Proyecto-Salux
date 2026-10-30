@@ -92,7 +92,7 @@ jobs:
       - run: npm run test:a11y
       - name: Guardar el informe si falló
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: informe-accesibilidad
           path: test-results/

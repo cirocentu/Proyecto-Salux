@@ -42,7 +42,7 @@ jobs:
             bash backend/scripts/respaldo/respaldar.sh supabase
 
       - name: Guardar el respaldo cifrado
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: respaldo-cifrado
           path: ${{ runner.temp }}/respaldos/*.enc
