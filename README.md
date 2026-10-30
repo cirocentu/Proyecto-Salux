@@ -117,10 +117,6 @@ Proyecto de la cátedra de Desarrollo de Software (UTN FRLP).
 | Ciro Centurion | [@cirocentu](https://github.com/cirocentu) | Backend y seguridad: API, base de datos, autenticación y reglas de los turnos |
 | Lucio Cantalupo | [@LucioCanta](https://github.com/LucioCanta) | Calidad e infraestructura: pruebas, pipeline de CI y despliegue |
 
-### Origen del historial
-
-El sistema se desarrolló **en conjunto por los tres integrantes**, trabajando sobre una única cuenta de GitHub y con asistencia de IA (Claude). El historial completo de ese desarrollo (con la evolución de cada fase) está en el [repositorio original](https://github.com/LucioCanta/Salux-DesarrolloDeSoftware). Este repositorio contiene el mismo código ordenado, y su historial reparte la carga entre los integrantes **según el área de responsabilidad de cada uno**, a pedido de la cátedra, para que figure la participación de los tres.
-
 ## Estado
 
 Desplegado y en funcionamiento (Vercel + Supabase). Está pendiente decidir la **licencia** del repositorio y adquirir un dominio propio para los correos (hoy los envía una cuenta de Brevo sin dominio verificado).
