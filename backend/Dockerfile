@@ -5,7 +5,7 @@
 # Node 24 es la versión LTS vigente. (Node 20 terminó su soporte en abril de 2026 y ya
 # no recibe parches de seguridad.) Alpine usa musl: Prisma necesita OpenSSL, que esta
 # imagen no trae por defecto.
-FROM node:24-alpine AS dependencias
+FROM node:25-alpine AS dependencias
 RUN apk add --no-cache openssl
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN npm ci --omit=dev \
     && npm cache clean --force \
     && find node_modules -name '*rhel-openssl*' -delete
 
-FROM node:24-alpine
+FROM node:25-alpine
 RUN apk add --no-cache openssl
 WORKDIR /app
 
