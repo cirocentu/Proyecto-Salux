@@ -19,7 +19,7 @@
     "test:a11y:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.10.1",
     "@vercel/functions": "^3.10.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
